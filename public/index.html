@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Shame · a verdict on your git history</title>
+<meta name="description" content="Drop a GitHub repo. Get a printed receipt of its most embarrassing commits. No signup. Shareable.">
+<meta property="og:title" content="Commit Shame">
+<meta property="og:description" content="A verdict on your git history. Drop a repo. Get a receipt.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧾</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="red-dot">●</span> COMMIT SHAME</div>
+  <div class="topbar-meta" id="quota-meta">no signup · pooled api</div>
+</div>
+
+<section class="hero">
+  <h1>Commit<span class="amp">·</span>Shame</h1>
+  <div class="sub">a verdict on your git history</div>
+</section>
+
+<div class="input-wrap">
+  <form class="input-row" id="judge-form" autocomplete="off">
+    <div class="prompt">&gt;</div>
+    <input class="repo-input" id="repo-input" type="text" placeholder="owner/repo or full GitHub URL" spellcheck="false" autocapitalize="off" autocorrect="off" />
+    <button type="submit" class="judge-btn" id="shame-btn">Judge</button>
+  </form>
+
+  <div class="examples">
+    <span class="examples-label">try:</span>
+    <button class="chip" data-repo="torvalds/linux">torvalds/linux</button>
+    <button class="chip" data-repo="microsoft/vscode">microsoft/vscode</button>
+    <button class="chip" data-repo="facebook/react">facebook/react</button>
+    <button class="chip" data-repo="vercel/next.js">vercel/next.js</button>
+    <button class="chip" data-repo="rails/rails">rails/rails</button>
+  </div>
+
+  <div class="recent-row" id="recent-row" style="display:none;">
+    <span class="examples-label">recent:</span>
+    <span id="recent-chips"></span>
+  </div>
+
+  <div class="opts-row">
+    <span>branch: <input type="text" class="branch-input" id="branch-input" placeholder="default" /></span>
+    <span style="margin-left:auto;">press <kbd>⌘</kbd> <kbd>K</kbd> to focus</span>
+  </div>
+
+  <div id="error-msg" role="alert"></div>
+</div>
+
+<div id="loading" aria-live="polite">
+  <div class="typewriter" id="typewriter"></div>
+</div>
+
+<div id="results"></div>
+
+<div class="page-foot">
+  no signup · no tracking · pooled api · built for the chaos
+</div>
+
+<div id="toast" role="status"></div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

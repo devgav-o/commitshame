@@ -1,0 +1,24 @@
+{
+  "name": "commit-shame",
+  "version": "0.3.0",
+  "private": true,
+  "description": "A verdict on your git history. Drop a repo, get a printed receipt of its most embarrassing commits.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon --quiet server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}
