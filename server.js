@@ -108,6 +108,14 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 app.use((req, res) => res.status(404).type('text').send('not found'));
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`commit-shame listening on http://localhost:${PORT}`);
 });
+
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    console.log(`${sig} received — closing.`);
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 10_000).unref();
+  });
+}

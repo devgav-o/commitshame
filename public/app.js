@@ -234,7 +234,7 @@ function render() {
     <div class="receipt fade-in" id="receipt-el">
       <div class="receipt-inner">
         <div class="r-title">★ ★ ★ Official Shame Receipt ★ ★ ★</div>
-        <div class="r-subtitle">commit-shame · est. 2024</div>
+        <div class="r-subtitle">commitsha.me</div>
         <div class="r-divider"></div>
 
         <div class="meta-grid">
@@ -503,7 +503,7 @@ async function renderShareCardCanvas() {
   y += 30;
   ctx.font = `400 13px ${FONT}`;
   ctx.fillStyle = ink3;
-  ctx.fillText('COMMIT-SHAME · EST. 2024', W/2, y);
+  ctx.fillText('COMMITSHA.ME', W/2, y);
   y += 28;
   drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
   y += 26;

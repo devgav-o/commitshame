@@ -2,6 +2,8 @@
 
 A verdict on your git history. Drop a GitHub repo, get a printed receipt of its most embarrassing commits.
 
+**Live: <https://commitsha.me>**
+
 > No signup. No tracking. Pooled API. Built for the chaos.
 
 ```
@@ -28,7 +30,7 @@ A verdict on your git history. Drop a GitHub repo, get a printed receipt of its 
 ## Quick start
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/devgav-o/commitshame.git
 cd commitshame
 cp .env.example .env
 # edit .env and paste your GitHub token (see below)
@@ -131,6 +133,20 @@ Anywhere that runs Node 18+ and accepts an env var works:
 - **Docker** — works as-is, just `COPY . .` and `npm ci --omit=dev`
 
 Cloudflare Workers / Vercel Edge **won't** work without rewriting — Express is a Node-only framework. If you want edge, port the proxy to Hono or itty-router.
+
+### Production checklist
+
+- [ ] `GITHUB_TOKEN` set (5,000 req/hr instead of 60)
+- [ ] `RATE_LIMIT_PER_HOUR` tuned for your expected traffic
+- [ ] TLS in front (Render/Railway/Fly.io give you this for free; for VPS, use nginx + certbot)
+- [ ] DNS pointed at your host (`commitsha.me` is the live deploy)
+- [ ] Server gracefully drains on `SIGTERM` (already wired)
+- [ ] Helmet sets HSTS + CSP defaults (already wired)
+- [ ] Per-IP rate limit caps `/api/*` so one visitor can't drain the pool
+
+## Contributing
+
+PRs welcome — especially new shame signals. Fork, add to `SHAME_SIGNALS` in [public/scoring.js](public/scoring.js) with a regex, label, and score, and open a PR. Keep the regex tight (false positives are worse than missed shames).
 
 ## License
 
