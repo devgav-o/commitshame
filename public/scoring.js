@@ -261,6 +261,15 @@ export function dedupForDisplay(scored) {
   return out;
 }
 
+export function getTier(avgScore, totalShame) {
+  if (totalShame === 0) return { name: 'CLEAN', rank: 0, blurb: 'no offenses found' };
+  if (avgScore >= 90) return { name: 'LEGENDARY', rank: 5, blurb: 'a hall-of-fame disaster' };
+  if (avgScore >= 80) return { name: 'HEAVY',     rank: 4, blurb: 'consistently shameful' };
+  if (avgScore >= 70) return { name: 'NOTABLE',   rank: 3, blurb: 'plenty to answer for' };
+  if (avgScore >= 60) return { name: 'MILD',      rank: 2, blurb: 'minor offenses, mostly' };
+  return                     { name: 'TRACE',     rank: 1, blurb: 'barely a smudge' };
+}
+
 export function getVerdict(avgScore, shameRate, totalShame) {
   if (totalShame === 0) return {
     title: 'CASE DISMISSED', sub: 'INSUFFICIENT EVIDENCE',

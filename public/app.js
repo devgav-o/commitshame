@@ -1,4 +1,4 @@
-import { scoreMessage, postProcess, dedupForDisplay, getVerdict } from './scoring.js';
+import { scoreMessage, postProcess, dedupForDisplay, getVerdict, getTier } from './scoring.js';
 
 const STATE = {
   repo: null, branch: null, commits: [], scored: [],
@@ -170,9 +170,10 @@ function computeTimeline(scored, commits) {
   if (!allDates.length) return null;
   const min = Math.min(...allDates);
   const max = Math.max(...allDates);
-  const weeks = Math.max(8, Math.min(20, Math.ceil((max - min) / (7 * 86400000))));
-  const bucketMs = (max - min) / weeks;
-  if (bucketMs <= 0) return null;
+  const span = max - min;
+  if (span <= 0) return null;
+  const weeks = Math.max(10, Math.min(24, Math.ceil(span / (7 * 86400000))));
+  const bucketMs = span / weeks;
   const buckets = new Array(weeks).fill(0);
   for (const c of scored) {
     const t = new Date(c.date).getTime();
@@ -181,10 +182,31 @@ function computeTimeline(scored, commits) {
     buckets[idx] += c.occurrences;
   }
   const peak = Math.max(...buckets, 1);
-  const blocks = '▁▂▃▄▅▆▇█';
-  const bars = buckets.map(v => v === 0 ? ' ' : blocks[Math.min(blocks.length - 1, Math.floor((v / peak) * (blocks.length - 1)))]).join('');
-  const fmt = ms => new Date(ms).toLocaleDateString([], { year: '2-digit', month: 'short' });
-  return { bars, start: fmt(min), end: fmt(max) };
+  const fmt = ms => new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const mid = min + span / 2;
+  return {
+    buckets, peak, weeks, bucketMs, min, max,
+    start: fmt(min), middle: fmt(mid), end: fmt(max),
+  };
+}
+
+function timelineSVG(tl) {
+  const W = 560, H = 90, padL = 4, padR = 4, padT = 4, padB = 4;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const gap = 2;
+  const barW = (innerW - gap * (tl.weeks - 1)) / tl.weeks;
+  const peakIdx = tl.buckets.indexOf(tl.peak);
+  const bars = tl.buckets.map((v, i) => {
+    const h = v === 0 ? 2 : Math.max(3, (v / tl.peak) * innerH);
+    const x = padL + i * (barW + gap);
+    const y = padT + (innerH - h);
+    const isPeak = i === peakIdx && v > 0;
+    const fill = v === 0 ? 'var(--rule)' : (isPeak ? 'var(--red)' : 'var(--ink)');
+    const opacity = v === 0 ? 0.35 : (isPeak ? 1 : 0.78);
+    return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}" fill="${fill}" opacity="${opacity}"><title>${v} offense${v===1?'':'s'}</title></rect>`;
+  }).join('');
+  return `<svg class="tl-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="offenses over time">${bars}</svg>`;
 }
 
 /* ─── render ──────────────────────────────────────────────────── */
@@ -197,6 +219,7 @@ function render() {
     : 0;
   const shameRate = commits.length > 0 ? Math.round((totalShame / commits.length) * 100) : 0;
   const verdict = getVerdict(avgScore, shameRate, totalShame);
+  const tier = getTier(avgScore, totalShame);
   const top = sortScored(scored, STATE.sort).slice(0, 18);
   const offenders = computeOffenders(scored);
   const timeline = computeTimeline(scored, commits);
@@ -205,6 +228,8 @@ function render() {
   const dateStr = dateNow.toISOString().slice(0, 10);
   const timeStr = dateNow.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  const meterFill = Math.max(0, Math.min(100, avgScore));
+
   const html = `
     <div class="receipt fade-in" id="receipt-el">
       <div class="receipt-inner">
@@ -212,52 +237,82 @@ function render() {
         <div class="r-subtitle">commit-shame · est. 2024</div>
         <div class="r-divider"></div>
 
-        <div class="meta-rows">
-          <div class="meta-row"><span class="k">repo</span><span class="v"><a href="https://github.com/${escapeAttr(repo)}" target="_blank" rel="noopener">${escapeHtml(repo)}</a></span></div>
-          <div class="meta-row"><span class="k">branch</span><span class="v">${escapeHtml(branch || repoInfo?.default_branch || 'default')}</span></div>
-          <div class="meta-row"><span class="k">analyzed</span><span class="v">${commits.length} commits</span></div>
-          ${repoInfo?.language ? `<div class="meta-row"><span class="k">language</span><span class="v">${escapeHtml(repoInfo.language)}</span></div>` : ''}
-          ${repoInfo?.stargazers_count != null ? `<div class="meta-row"><span class="k">stars</span><span class="v">${repoInfo.stargazers_count.toLocaleString()}</span></div>` : ''}
-          <div class="meta-row"><span class="k">date</span><span class="v">${dateStr} · ${timeStr}</span></div>
+        <div class="meta-grid">
+          <div class="meta-cell"><span class="k">repo</span><span class="v"><a href="https://github.com/${escapeAttr(repo)}" target="_blank" rel="noopener">${escapeHtml(repo)}</a></span></div>
+          <div class="meta-cell"><span class="k">branch</span><span class="v">${escapeHtml(branch || repoInfo?.default_branch || 'default')}</span></div>
+          <div class="meta-cell"><span class="k">analyzed</span><span class="v">${commits.length} commits</span></div>
+          ${repoInfo?.language ? `<div class="meta-cell"><span class="k">language</span><span class="v">${escapeHtml(repoInfo.language)}</span></div>` : ''}
+          ${repoInfo?.stargazers_count != null ? `<div class="meta-cell"><span class="k">stars</span><span class="v">${repoInfo.stargazers_count.toLocaleString()}</span></div>` : ''}
+          <div class="meta-cell"><span class="k">date</span><span class="v">${dateStr}</span></div>
         </div>
 
         <div class="r-divider thick"></div>
 
         <div class="verdict-block">
-          <div class="verdict-stars">★ ★ ★</div>
           <div class="verdict-line">verdict</div>
           <div class="verdict-stamp">${escapeHtml(verdict.title)}</div>
-          <div class="verdict-line" style="margin-top:14px;">${escapeHtml(verdict.sub)}</div>
+          <div class="verdict-sub">${escapeHtml(verdict.sub)}</div>
           <div class="verdict-text">${escapeHtml(verdict.text)}</div>
+        </div>
 
-          <div class="scores-row">
-            <div class="score-item">
-              <div class="score-num" data-count="${avgScore}">0<span class="of"> / 100</span></div>
-              <div class="score-label">shame score</div>
+        <div class="r-divider thick"></div>
+
+        <div class="score-card">
+          <div class="score-card-head">
+            <span class="k">shame score</span>
+            <span class="score-explain">avg severity of bad commits · 0 clean → 100 cursed</span>
+          </div>
+          <div class="score-hero">
+            <div class="score-big" data-count="${avgScore}">0<span class="of">/100</span></div>
+            <div class="tier-badge tier-${tier.rank}">${escapeHtml(tier.name)}</div>
+          </div>
+          <div class="meter" aria-label="shame meter">
+            <div class="meter-track">
+              <div class="meter-zone z1"></div>
+              <div class="meter-zone z2"></div>
+              <div class="meter-zone z3"></div>
+              <div class="meter-zone z4"></div>
+              <div class="meter-zone z5"></div>
+              <div class="meter-fill" style="width:${meterFill}%"></div>
+              <div class="meter-marker" style="left:${meterFill}%"></div>
             </div>
-            <div class="score-item">
-              <div class="score-num" data-count="${totalShame}">0</div>
-              <div class="score-label">offenses</div>
+            <div class="meter-axis">
+              <span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span>
             </div>
-            <div class="score-item">
-              <div class="score-num" data-count="${shameRate}">0<span class="of">%</span></div>
-              <div class="score-label">shame rate</div>
+            <div class="meter-zonelabels">
+              <span>trace</span><span>mild</span><span>notable</span><span>heavy</span><span>legendary</span>
+            </div>
+          </div>
+          <div class="mini-stats">
+            <div class="mini-stat">
+              <span class="mini-num" data-count="${totalShame}">0</span>
+              <span class="mini-label">offenses</span>
+            </div>
+            <div class="mini-stat">
+              <span class="mini-num" data-count="${shameRate}">0<span class="of">%</span></span>
+              <span class="mini-label">of commits flagged</span>
+            </div>
+            <div class="mini-stat">
+              <span class="mini-num">${commits.length}</span>
+              <span class="mini-label">analyzed</span>
             </div>
           </div>
         </div>
 
         <div class="r-divider thick"></div>
 
-        <div class="itemized-head">itemized offenses</div>
-        <div class="sort-bar" id="sort-bar">
-          <span data-sort="score" class="${STATE.sort==='score'?'active':''}">▾ highest fine</span>
-          <span data-sort="recent" class="${STATE.sort==='recent'?'active':''}">most recent</span>
-          <span data-sort="repeats" class="${STATE.sort==='repeats'?'active':''}">most repeated</span>
+        <div class="section-head">
+          <span class="itemized-head">itemized offenses</span>
+          <div class="sort-bar" id="sort-bar">
+            <span data-sort="score" class="${STATE.sort==='score'?'active':''}">fine</span>
+            <span data-sort="recent" class="${STATE.sort==='recent'?'active':''}">recent</span>
+            <span data-sort="repeats" class="${STATE.sort==='repeats'?'active':''}">repeated</span>
+          </div>
         </div>
 
         ${top.length === 0 ? `
-          <div style="text-align:center; padding:30px 0; color:var(--ink-3); font-size:13px;">
-            no shameful commits found in this window. either meticulous or covering tracks.
+          <div class="empty-note">
+            no shameful commits in this window. either meticulous or covering tracks.
           </div>
         ` : top.map((c, i) => `
           <a class="commit-row" href="${escapeAttr(c.url)}" target="_blank" rel="noopener" data-rank="${i+1}">
@@ -271,34 +326,48 @@ function render() {
               <span class="label">${escapeHtml(c.label)}</span>
               <span>${escapeHtml(c.author)}</span>
               ${c.date ? `<span>${shortDate(c.date)}</span>` : ''}
-              <span>${c.sha.slice(0, 7)}</span>
+              <span class="sha">${c.sha.slice(0, 7)}</span>
             </div>
           </a>
         `).join('')}
 
         ${offenders.length >= 3 ? `
           <div class="r-divider thick" style="margin-top:18px;"></div>
-          <div class="itemized-head">repeat offenders</div>
-          <div class="r-subtitle" style="margin: 4px 0 12px;">authors with most shame</div>
+          <div class="section-head">
+            <span class="itemized-head">repeat offenders</span>
+            <span class="section-sub">authors with most shame</span>
+          </div>
           <div class="offenders-block">
-            ${offenders.slice(0, 6).map((o, i) => `
+            ${offenders.slice(0, 6).map((o, i) => {
+              const maxCount = offenders[0].count || 1;
+              const pct = Math.max(8, Math.round((o.count / maxCount) * 100));
+              return `
               <div class="offender-row">
                 <span class="offender-rank">#${i+1}</span>
-                <span class="offender-name">${escapeHtml(o.name)}</span>
-                <span class="offender-stat">${o.count} offense${o.count===1?'':'s'} · avg <strong>¤${o.avg}</strong></span>
+                <div class="offender-main">
+                  <div class="offender-line1">
+                    <span class="offender-name">${escapeHtml(o.name)}</span>
+                    <span class="offender-count">${o.count}</span>
+                  </div>
+                  <div class="offender-bar"><div class="offender-bar-fill" style="width:${pct}%"></div></div>
+                </div>
+                <span class="offender-avg">avg <strong>¤${o.avg}</strong></span>
               </div>
-            `).join('')}
+            `;}).join('')}
           </div>
         ` : ''}
 
         ${timeline ? `
           <div class="r-divider thick" style="margin-top:18px;"></div>
-          <div class="itemized-head">shame timeline</div>
-          <div class="r-subtitle" style="margin: 4px 0 8px;">offenses per week · oldest → newest</div>
+          <div class="section-head">
+            <span class="itemized-head">shame over time</span>
+            <span class="section-sub">peak in red</span>
+          </div>
           <div class="timeline-block">
-            <div class="timeline-bars">${timeline.bars}</div>
+            ${timelineSVG(timeline)}
             <div class="timeline-axis">
               <span>${timeline.start}</span>
+              <span>${timeline.middle}</span>
               <span>${timeline.end}</span>
             </div>
           </div>
@@ -385,9 +454,11 @@ async function renderShareCardCanvas() {
     : 0;
   const shameRate = commits.length > 0 ? Math.round((totalShame / commits.length) * 100) : 0;
   const verdict = getVerdict(avgScore, shameRate, totalShame);
+  const tier = getTier(avgScore, totalShame);
   const top = sortScored(scored, 'score').slice(0, 8);
+  const tl = computeTimeline(scored, commits);
 
-  const H = 220 + 280 + 140 + (top.length * 92) + 200;
+  const H = 220 + 320 + 220 + (top.length * 92) + (tl ? 200 : 0) + 200;
 
   const canvas = document.createElement('canvas');
   canvas.width = W * dpr;
@@ -498,32 +569,151 @@ async function renderShareCardCanvas() {
   y += 60;
 
   drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
-  y += 30;
-  const scoreCols = [
-    { num: avgScore + '', sub: '/100', label: 'SHAME SCORE' },
+  y += 40;
+
+  // section label
+  ctx.fillStyle = ink;
+  ctx.font = `700 14px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.fillText('SHAME SCORE', W/2, y);
+  y += 18;
+  ctx.fillStyle = ink3;
+  ctx.font = `400 12px ${FONT}`;
+  ctx.fillText('avg severity of bad commits · 0 clean → 100 cursed', W/2, y);
+  y += 110;
+
+  // hero score number + tier badge inline (y here = baseline of big number)
+  ctx.fillStyle = ink;
+  ctx.font = `700 96px ${FONT}`;
+  ctx.textAlign = 'left';
+  const bigStr = String(avgScore);
+  const bigW = ctx.measureText(bigStr).width;
+  ctx.font = `700 22px ${STAMP_FONT}`;
+  const tName = tier.name;
+  const tw = ctx.measureText(tName).width;
+  const subW = 70;        // "/100" reserved
+  const gapBetween = 28;  // gap between subscript and badge
+  const totalGroupW = bigW + 8 + subW + gapBetween + (tw + 28);
+  const groupX = W/2 - totalGroupW/2;
+
+  ctx.fillStyle = ink;
+  ctx.font = `700 96px ${FONT}`;
+  ctx.fillText(bigStr, groupX, y);
+  ctx.fillStyle = ink3;
+  ctx.font = `400 28px ${FONT}`;
+  ctx.fillText('/100', groupX + bigW + 8, y);
+
+  // tier badge: rotated, vertically centered to numeric block
+  const tierColors = ['#2d6a3a','#4a3f37','#b07a00','#c25a1d','#c8302d','#c8302d'];
+  const tierColor = tierColors[tier.rank];
+  ctx.save();
+  ctx.translate(groupX + bigW + 8 + subW + gapBetween + (tw + 28)/2, y - 30);
+  ctx.rotate(-2 * Math.PI / 180);
+  ctx.font = `700 22px ${STAMP_FONT}`;
+  ctx.lineWidth = tier.rank >= 5 ? 4 : 2;
+  ctx.strokeStyle = tierColor;
+  ctx.fillStyle = '#f5f1e8';
+  ctx.fillRect(-tw/2 - 14, -22, tw + 28, 40);
+  ctx.strokeRect(-tw/2 - 14, -22, tw + 28, 40);
+  if (tier.rank >= 5) ctx.strokeRect(-tw/2 - 8, -16, tw + 16, 28);
+  ctx.fillStyle = tierColor;
+  ctx.textAlign = 'center';
+  ctx.fillText(tName, 0, 6);
+  ctx.restore();
+
+  y += 36;
+
+  // meter bar
+  const meterX = PAD + 40, meterW = W - (PAD + 40) * 2;
+  const meterY = y, meterH = 22;
+  // zones
+  const zoneColors = ['#a8c8a8','#d8c878','#dca070','#d88060','#c8302d'];
+  const zoneOpacity = [0.35, 0.4, 0.45, 0.45, 0.55];
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = zoneColors[i];
+    ctx.globalAlpha = zoneOpacity[i];
+    ctx.fillRect(meterX + (meterW/5)*i, meterY, meterW/5, meterH);
+  }
+  ctx.globalAlpha = 1;
+  // border
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(meterX, meterY, meterW, meterH);
+  // hatched fill up to score
+  const fillW = (Math.max(0, Math.min(100, avgScore)) / 100) * meterW;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(meterX, meterY, fillW, meterH);
+  ctx.clip();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 1;
+  for (let i = -meterH; i < fillW + meterH; i += 6) {
+    ctx.beginPath();
+    ctx.moveTo(meterX + i, meterY + meterH);
+    ctx.lineTo(meterX + i + meterH, meterY);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // marker
+  const markerX = meterX + fillW;
+  ctx.fillStyle = red;
+  ctx.fillRect(markerX - 2, meterY - 8, 4, meterH + 16);
+  ctx.beginPath();
+  ctx.moveTo(markerX, meterY - 8);
+  ctx.lineTo(markerX - 7, meterY - 16);
+  ctx.lineTo(markerX + 7, meterY - 16);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(markerX, meterY + meterH + 8);
+  ctx.lineTo(markerX - 7, meterY + meterH + 16);
+  ctx.lineTo(markerX + 7, meterY + meterH + 16);
+  ctx.closePath();
+  ctx.fill();
+
+  // axis labels (numeric)
+  ctx.fillStyle = ink3;
+  ctx.font = `400 11px ${FONT}`;
+  ctx.textAlign = 'center';
+  for (const t of [0, 20, 40, 60, 80, 100]) {
+    ctx.fillText(String(t), meterX + (t/100) * meterW, meterY + meterH + 32);
+  }
+  // zone labels
+  const zoneNames = ['TRACE','MILD','NOTABLE','HEAVY','LEGENDARY'];
+  ctx.font = `600 10px ${FONT}`;
+  for (let i = 0; i < 5; i++) {
+    ctx.fillText(zoneNames[i], meterX + (meterW/5)*i + meterW/10, meterY + meterH + 50);
+  }
+  y += meterH + 70;
+
+  // mini stats row
+  drawDashedLine(ctx, PAD + 40, y, W - PAD - 40, y, rule);
+  y += 28;
+  const miniCols = [
     { num: totalShame + '', sub: '', label: 'OFFENSES' },
-    { num: shameRate + '', sub: '%', label: 'SHAME RATE' },
+    { num: shameRate + '', sub: '%', label: 'OF COMMITS FLAGGED' },
+    { num: commits.length + '', sub: '', label: 'ANALYZED' },
   ];
-  const colW = (W - PAD * 2) / 3;
-  for (let i = 0; i < scoreCols.length; i++) {
-    const cx = PAD + colW * i + colW/2;
+  const mcolW = (W - PAD * 2) / 3;
+  for (let i = 0; i < miniCols.length; i++) {
+    const cx = PAD + mcolW * i + mcolW/2;
     ctx.fillStyle = ink;
-    ctx.font = `700 44px ${FONT}`;
+    ctx.font = `700 32px ${FONT}`;
     ctx.textAlign = 'center';
-    const numW = ctx.measureText(scoreCols[i].num).width;
-    ctx.fillText(scoreCols[i].num, cx - (scoreCols[i].sub ? 8 : 0), y);
-    if (scoreCols[i].sub) {
+    const numW = ctx.measureText(miniCols[i].num).width;
+    ctx.fillText(miniCols[i].num, cx - (miniCols[i].sub ? 6 : 0), y);
+    if (miniCols[i].sub) {
       ctx.fillStyle = ink3;
-      ctx.font = `400 18px ${FONT}`;
+      ctx.font = `400 16px ${FONT}`;
       ctx.textAlign = 'left';
-      ctx.fillText(scoreCols[i].sub, cx + numW/2 - 4, y);
+      ctx.fillText(miniCols[i].sub, cx + numW/2 - 2, y);
     }
     ctx.fillStyle = ink3;
-    ctx.font = `400 12px ${FONT}`;
+    ctx.font = `400 11px ${FONT}`;
     ctx.textAlign = 'center';
-    ctx.fillText(scoreCols[i].label, cx, y + 22);
+    ctx.fillText(miniCols[i].label, cx, y + 20);
   }
-  y += 56;
+  y += 48;
 
   drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
   y += 6;
@@ -569,6 +759,60 @@ async function renderShareCardCanvas() {
   y += 8;
   drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
   y += 30;
+
+  if (tl) {
+    ctx.fillStyle = ink;
+    ctx.font = `700 14px ${FONT}`;
+    ctx.textAlign = 'left';
+    ctx.fillText('SHAME OVER TIME', PAD, y);
+    ctx.fillStyle = ink3;
+    ctx.font = `400 11px ${FONT}`;
+    ctx.textAlign = 'right';
+    ctx.fillText('PEAK IN RED', W - PAD, y);
+    y += 18;
+
+    const chartX = PAD, chartY = y;
+    const chartW = W - PAD * 2, chartH = 110;
+    // background panel
+    ctx.fillStyle = '#ede7d8';
+    ctx.fillRect(chartX, chartY, chartW, chartH);
+    ctx.strokeStyle = rule;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(chartX + 0.5, chartY + 0.5, chartW - 1, chartH - 1);
+    ctx.setLineDash([]);
+
+    const barPadX = 12, barPadY = 10;
+    const innerW = chartW - barPadX * 2;
+    const innerH = chartH - barPadY * 2;
+    const gap = 3;
+    const barW = (innerW - gap * (tl.weeks - 1)) / tl.weeks;
+    const peakIdx = tl.buckets.indexOf(tl.peak);
+    for (let i = 0; i < tl.weeks; i++) {
+      const v = tl.buckets[i];
+      const h = v === 0 ? 2 : Math.max(4, (v / tl.peak) * innerH);
+      const bx = chartX + barPadX + i * (barW + gap);
+      const by = chartY + barPadY + (innerH - h);
+      const isPeak = i === peakIdx && v > 0;
+      ctx.fillStyle = v === 0 ? rule : (isPeak ? red : ink);
+      ctx.globalAlpha = v === 0 ? 0.5 : (isPeak ? 1 : 0.78);
+      ctx.fillRect(bx, by, barW, h);
+    }
+    ctx.globalAlpha = 1;
+    y += chartH + 8;
+
+    ctx.fillStyle = ink3;
+    ctx.font = `400 11px ${FONT}`;
+    ctx.textAlign = 'left';
+    ctx.fillText(tl.start, PAD, y);
+    ctx.textAlign = 'center';
+    ctx.fillText(tl.middle, W/2, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(tl.end, W - PAD, y);
+    y += 22;
+    drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
+    y += 26;
+  }
 
   ctx.fillStyle = ink3;
   ctx.font = `400 13px ${FONT}`;
