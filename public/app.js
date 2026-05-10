@@ -220,7 +220,7 @@ function render() {
   const shameRate = commits.length > 0 ? Math.round((totalShame / commits.length) * 100) : 0;
   const verdict = getVerdict(avgScore, shameRate, totalShame);
   const tier = getTier(avgScore, totalShame);
-  const top = sortScored(scored, STATE.sort).slice(0, 18);
+  const top = sortScored(scored, STATE.sort).slice(0, 24);
   const offenders = computeOffenders(scored);
   const timeline = computeTimeline(scored, commits);
 
@@ -375,9 +375,9 @@ function render() {
 
         <div class="r-divider thick" style="margin-top:18px;"></div>
         <div class="receipt-foot">
-          thank you for your cooperation<br>
-          commitshame · ${escapeHtml(repo)}<br>
-          generated ${dateStr} · ${timeStr}
+          thank you for your cooperation · no refunds<br>
+          commitshame · <a href="https://commitsha.me" style="border-bottom:1px dotted var(--ink-3);text-decoration:none;color:inherit;">commitsha.me</a><br>
+          <span style="font-size:10px;letter-spacing:0.06em;">${escapeHtml(repo)} · ${dateStr} · ${timeStr}</span>
           <div class="barcode-fake"></div>
         </div>
       </div>
@@ -444,8 +444,8 @@ function bindResultEvents() {
 async function renderShareCardCanvas() {
   await document.fonts.ready;
   const dpr = 2;
-  const W = 1080;
-  const PAD = 64;
+  const W = 1200;
+  const H = 630;
 
   const { scored, commits, repo, branch, repoInfo } = STATE;
   const totalShame = scored.reduce((a, c) => a + c.occurrences, 0);
@@ -456,9 +456,6 @@ async function renderShareCardCanvas() {
   const verdict = getVerdict(avgScore, shameRate, totalShame);
   const tier = getTier(avgScore, totalShame);
   const top = sortScored(scored, 'score').slice(0, 8);
-  const tl = computeTimeline(scored, commits);
-
-  const H = 220 + 320 + 220 + (top.length * 92) + (tl ? 200 : 0) + 200;
 
   const canvas = document.createElement('canvas');
   canvas.width = W * dpr;
@@ -466,8 +463,7 @@ async function renderShareCardCanvas() {
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  // paint cream paper at the device-pixel surface, then add subtle grain
-  // by reading existing pixels and nudging RGB (alpha stays 255).
+  // Paper background with grain
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#f5f1e8';
@@ -475,7 +471,7 @@ async function renderShareCardCanvas() {
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {
-    const n = (Math.random() - 0.5) * 14;
+    const n = (Math.random() - 0.5) * 12;
     d[i]   = Math.max(0, Math.min(255, d[i]   + n));
     d[i+1] = Math.max(0, Math.min(255, d[i+1] + n));
     d[i+2] = Math.max(0, Math.min(255, d[i+2] + n));
@@ -485,345 +481,302 @@ async function renderShareCardCanvas() {
 
   const FONT = "'IBM Plex Mono', 'Menlo', monospace";
   const STAMP_FONT = "'Special Elite', 'IBM Plex Mono', 'Menlo', monospace";
-  const ink = '#1a1410';
+  const ink  = '#1a1410';
   const ink2 = '#4a3f37';
   const ink3 = '#8a7d70';
-  const red = '#c8302d';
+  const red  = '#c8302d';
   const rule = '#c9bfaf';
+  const paper2 = '#ede7d8';
 
-  let y = 80;
+  const TEAR = 16;
+  const PAD  = 52;
 
-  drawTearStrip(ctx, 0, 0, W, 14, true);
-  drawTearStrip(ctx, 0, H - 14, W, 14, false);
+  // ── tear strips ──
+  drawTearStrip(ctx, 0, 0, W, TEAR, true);
+  drawTearStrip(ctx, 0, H - TEAR, W, TEAR, false);
 
+  // ── HEADER (y: TEAR → TEAR+62) ──
+  const HEADER_Y = TEAR + 14;
   ctx.fillStyle = ink;
-  ctx.font = `700 22px ${FONT}`;
+  ctx.font = `700 18px ${STAMP_FONT}`;
   ctx.textAlign = 'center';
-  ctx.fillText('★ ★ ★  OFFICIAL SHAME RECEIPT  ★ ★ ★', W/2, y);
-  y += 30;
-  ctx.font = `400 13px ${FONT}`;
+  ctx.fillText('★  ★  ★   OFFICIAL SHAME RECEIPT   ★  ★  ★', W / 2, HEADER_Y + 14);
   ctx.fillStyle = ink3;
-  ctx.fillText('COMMITSHA.ME', W/2, y);
-  y += 28;
-  drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
-  y += 26;
+  ctx.font = `400 11px ${FONT}`;
+  ctx.letterSpacing = '0.2em';
+  ctx.fillText('C O M M I T S H A . M E', W / 2, HEADER_Y + 32);
+  ctx.letterSpacing = '0em';
 
-  ctx.font = `400 18px ${FONT}`;
-  ctx.textAlign = 'left';
-  const metaRows = [
-    ['REPO', repo],
-    ['BRANCH', branch || repoInfo?.default_branch || 'default'],
-    ['ANALYZED', `${commits.length} commits`],
-  ];
-  if (repoInfo?.language) metaRows.push(['LANGUAGE', repoInfo.language]);
-  if (repoInfo?.stargazers_count != null) metaRows.push(['STARS', repoInfo.stargazers_count.toLocaleString()]);
-  metaRows.push(['DATE', new Date().toISOString().slice(0,10)]);
+  const HDR_DIV = TEAR + 52;
+  drawDashedLine(ctx, PAD, HDR_DIV, W - PAD, HDR_DIV, rule, 6);
 
-  for (const [k, v] of metaRows) {
-    ctx.font = `400 13px ${FONT}`;
-    ctx.fillStyle = ink3;
-    ctx.fillText(k, PAD, y);
-    ctx.font = `500 17px ${FONT}`;
-    ctx.fillStyle = ink;
-    ctx.textAlign = 'right';
-    ctx.fillText(String(v), W - PAD, y);
-    ctx.textAlign = 'left';
-    y += 28;
-  }
+  // ── TWO-COLUMN MAIN (y: HDR_DIV → HDR_DIV+290) ──
+  const COL_DIV_X = 400;    // x where left col ends
+  const MAIN_TOP  = HDR_DIV + 22;
+  const MAIN_BOT  = HDR_DIV + 298;
 
-  y += 14;
-  drawDashedLine(ctx, PAD, y, W - PAD, y, rule, 8);
-  y += 6;
-  drawDashedLine(ctx, PAD, y, W - PAD, y, rule, 8);
-  y += 28;
-
-  ctx.textAlign = 'center';
-  ctx.fillStyle = ink3;
-  ctx.font = `400 14px ${FONT}`;
-  ctx.fillText('★ ★ ★', W/2, y); y += 18;
-  ctx.fillText('VERDICT', W/2, y); y += 56;
-
+  // vertical dashed divider between columns
   ctx.save();
-  ctx.translate(W/2, y);
-  ctx.rotate(-3 * Math.PI / 180);
-  ctx.font = `700 64px ${STAMP_FONT}`;
-  ctx.fillStyle = red;
-  const stampText = verdict.title;
-  const sw = ctx.measureText(stampText).width;
-  const sh = 80;
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = red;
-  ctx.strokeRect(-sw/2 - 28, -sh/2 - 4, sw + 56, sh + 8);
+  ctx.strokeStyle = rule;
   ctx.lineWidth = 1;
-  ctx.strokeRect(-sw/2 - 22, -sh/2 + 2, sw + 44, sh - 4);
-  ctx.fillText(stampText, 0, 22);
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  ctx.moveTo(COL_DIV_X, MAIN_TOP);
+  ctx.lineTo(COL_DIV_X, MAIN_BOT);
+  ctx.stroke();
   ctx.restore();
-  y += 56;
 
-  ctx.fillStyle = ink3;
-  ctx.font = `400 14px ${FONT}`;
-  ctx.fillText(verdict.sub, W/2, y); y += 36;
-  ctx.fillStyle = ink2;
-  ctx.font = `400 16px ${FONT}`;
-  wrapText(ctx, verdict.text, W/2, y, W - PAD*2 - 80, 22, 'center');
-  y += 60;
+  // ── LEFT COLUMN: repo info ──
+  let lY = MAIN_TOP + 4;
+  ctx.textAlign = 'left';
 
-  drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
-  y += 40;
-
-  // section label
-  ctx.fillStyle = ink;
-  ctx.font = `700 14px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.fillText('SHAME SCORE', W/2, y);
-  y += 18;
+  // repo name — owner dimmed, name bold
   ctx.fillStyle = ink3;
   ctx.font = `400 12px ${FONT}`;
-  ctx.fillText('avg severity of bad commits · 0 clean → 100 cursed', W/2, y);
-  y += 110;
-
-  // hero score number + tier badge inline (y here = baseline of big number)
-  ctx.fillStyle = ink;
-  ctx.font = `700 96px ${FONT}`;
-  ctx.textAlign = 'left';
-  const bigStr = String(avgScore);
-  const bigW = ctx.measureText(bigStr).width;
-  ctx.font = `700 22px ${STAMP_FONT}`;
-  const tName = tier.name;
-  const tw = ctx.measureText(tName).width;
-  const subW = 70;        // "/100" reserved
-  const gapBetween = 28;  // gap between subscript and badge
-  const totalGroupW = bigW + 8 + subW + gapBetween + (tw + 28);
-  const groupX = W/2 - totalGroupW/2;
-
-  ctx.fillStyle = ink;
-  ctx.font = `700 96px ${FONT}`;
-  ctx.fillText(bigStr, groupX, y);
-  ctx.fillStyle = ink3;
-  ctx.font = `400 28px ${FONT}`;
-  ctx.fillText('/100', groupX + bigW + 8, y);
-
-  // tier badge: rotated, vertically centered to numeric block
-  const tierColors = ['#2d6a3a','#4a3f37','#b07a00','#c25a1d','#c8302d','#c8302d'];
-  const tierColor = tierColors[tier.rank];
-  ctx.save();
-  ctx.translate(groupX + bigW + 8 + subW + gapBetween + (tw + 28)/2, y - 30);
-  ctx.rotate(-2 * Math.PI / 180);
-  ctx.font = `700 22px ${STAMP_FONT}`;
-  ctx.lineWidth = tier.rank >= 5 ? 4 : 2;
-  ctx.strokeStyle = tierColor;
-  ctx.fillStyle = '#f5f1e8';
-  ctx.fillRect(-tw/2 - 14, -22, tw + 28, 40);
-  ctx.strokeRect(-tw/2 - 14, -22, tw + 28, 40);
-  if (tier.rank >= 5) ctx.strokeRect(-tw/2 - 8, -16, tw + 16, 28);
-  ctx.fillStyle = tierColor;
-  ctx.textAlign = 'center';
-  ctx.fillText(tName, 0, 6);
-  ctx.restore();
-
-  y += 36;
-
-  // meter bar
-  const meterX = PAD + 40, meterW = W - (PAD + 40) * 2;
-  const meterY = y, meterH = 22;
-  // zones
-  const zoneColors = ['#a8c8a8','#d8c878','#dca070','#d88060','#c8302d'];
-  const zoneOpacity = [0.35, 0.4, 0.45, 0.45, 0.55];
-  for (let i = 0; i < 5; i++) {
-    ctx.fillStyle = zoneColors[i];
-    ctx.globalAlpha = zoneOpacity[i];
-    ctx.fillRect(meterX + (meterW/5)*i, meterY, meterW/5, meterH);
+  ctx.fillText('REPOSITORY', PAD, lY);
+  lY += 18;
+  const rParts = repo.split('/');
+  if (rParts.length === 2) {
+    ctx.fillStyle = ink2;
+    ctx.font = `400 19px ${FONT}`;
+    const ownerW = ctx.measureText(rParts[0] + '/').width;
+    ctx.fillText(rParts[0] + '/', PAD, lY);
+    ctx.fillStyle = ink;
+    ctx.font = `700 19px ${FONT}`;
+    ctx.fillText(rParts[1], PAD + ownerW, lY);
+  } else {
+    ctx.fillStyle = ink;
+    ctx.font = `700 19px ${FONT}`;
+    ctx.fillText(repo, PAD, lY);
   }
-  ctx.globalAlpha = 1;
-  // border
-  ctx.strokeStyle = ink;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(meterX, meterY, meterW, meterH);
-  // hatched fill up to score
-  const fillW = (Math.max(0, Math.min(100, avgScore)) / 100) * meterW;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(meterX, meterY, fillW, meterH);
-  ctx.clip();
-  ctx.strokeStyle = ink;
-  ctx.lineWidth = 1;
-  for (let i = -meterH; i < fillW + meterH; i += 6) {
-    ctx.beginPath();
-    ctx.moveTo(meterX + i, meterY + meterH);
-    ctx.lineTo(meterX + i + meterH, meterY);
-    ctx.stroke();
-  }
-  ctx.restore();
-  // marker
-  const markerX = meterX + fillW;
-  ctx.fillStyle = red;
-  ctx.fillRect(markerX - 2, meterY - 8, 4, meterH + 16);
-  ctx.beginPath();
-  ctx.moveTo(markerX, meterY - 8);
-  ctx.lineTo(markerX - 7, meterY - 16);
-  ctx.lineTo(markerX + 7, meterY - 16);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(markerX, meterY + meterH + 8);
-  ctx.lineTo(markerX - 7, meterY + meterH + 16);
-  ctx.lineTo(markerX + 7, meterY + meterH + 16);
-  ctx.closePath();
-  ctx.fill();
+  lY += 26;
 
-  // axis labels (numeric)
+  const metaLeft = [
+    ['BRANCH',   branch || repoInfo?.default_branch || 'default'],
+    ['ANALYZED', `${commits.length} commits`],
+  ];
+  if (repoInfo?.language)           metaLeft.push(['LANGUAGE', repoInfo.language]);
+  if (repoInfo?.stargazers_count != null) metaLeft.push(['STARS', `★ ${repoInfo.stargazers_count.toLocaleString()}`]);
+  metaLeft.push(['DATE', new Date().toISOString().slice(0, 10)]);
+
+  for (const [k, v] of metaLeft) {
+    ctx.fillStyle = ink3;
+    ctx.font = `400 10px ${FONT}`;
+    ctx.fillText(k, PAD, lY);
+    ctx.fillStyle = ink2;
+    ctx.font = `500 14px ${FONT}`;
+    ctx.fillText(String(v), PAD + 88, lY);
+    lY += 20;
+  }
+
+  // mini stats block at bottom of left col
+  lY = MAIN_BOT - 70;
+  drawDashedLine(ctx, PAD, lY - 10, COL_DIV_X - 20, lY - 10, rule, 4);
+  const miniItems = [
+    { num: String(totalShame), label: 'OFFENSES' },
+    { num: `${shameRate}%`,    label: 'SHAME RATE' },
+    { num: String(commits.length), label: 'ANALYZED' },
+  ];
+  const miniColW = (COL_DIV_X - PAD) / 3;
+  for (let i = 0; i < 3; i++) {
+    const cx = PAD + miniColW * i + miniColW / 2;
+    ctx.fillStyle = i === 0 ? red : ink;
+    ctx.font = `700 22px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(miniItems[i].num, cx, lY + 16);
+    ctx.fillStyle = ink3;
+    ctx.font = `400 9px ${FONT}`;
+    ctx.fillText(miniItems[i].label, cx, lY + 29);
+  }
+
+  // ── RIGHT COLUMN: verdict + score ──
+  const RX = COL_DIV_X + 36;
+  const RW = W - RX - PAD;
+  const RCX = RX + RW / 2;  // center x of right column
+  let rY = MAIN_TOP + 10;
+
+  // "VERDICT" label
   ctx.fillStyle = ink3;
   ctx.font = `400 11px ${FONT}`;
   ctx.textAlign = 'center';
-  for (const t of [0, 20, 40, 60, 80, 100]) {
-    ctx.fillText(String(t), meterX + (t/100) * meterW, meterY + meterH + 32);
-  }
-  // zone labels
-  const zoneNames = ['TRACE','MILD','NOTABLE','HEAVY','LEGENDARY'];
-  ctx.font = `600 10px ${FONT}`;
-  for (let i = 0; i < 5; i++) {
-    ctx.fillText(zoneNames[i], meterX + (meterW/5)*i + meterW/10, meterY + meterH + 50);
-  }
-  y += meterH + 70;
+  ctx.fillText('V E R D I C T', RCX, rY + 8);
+  rY += 26;
 
-  // mini stats row
-  drawDashedLine(ctx, PAD + 40, y, W - PAD - 40, y, rule);
-  y += 28;
-  const miniCols = [
-    { num: totalShame + '', sub: '', label: 'OFFENSES' },
-    { num: shameRate + '', sub: '%', label: 'OF COMMITS FLAGGED' },
-    { num: commits.length + '', sub: '', label: 'ANALYZED' },
-  ];
-  const mcolW = (W - PAD * 2) / 3;
-  for (let i = 0; i < miniCols.length; i++) {
-    const cx = PAD + mcolW * i + mcolW/2;
-    ctx.fillStyle = ink;
-    ctx.font = `700 32px ${FONT}`;
-    ctx.textAlign = 'center';
-    const numW = ctx.measureText(miniCols[i].num).width;
-    ctx.fillText(miniCols[i].num, cx - (miniCols[i].sub ? 6 : 0), y);
-    if (miniCols[i].sub) {
-      ctx.fillStyle = ink3;
-      ctx.font = `400 16px ${FONT}`;
-      ctx.textAlign = 'left';
-      ctx.fillText(miniCols[i].sub, cx + numW/2 - 2, y);
-    }
-    ctx.fillStyle = ink3;
-    ctx.font = `400 11px ${FONT}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(miniCols[i].label, cx, y + 20);
-  }
-  y += 48;
+  // Big verdict stamp
+  ctx.save();
+  ctx.translate(RCX, rY + 44);
+  ctx.rotate(-3 * Math.PI / 180);
+  ctx.font = `700 62px ${STAMP_FONT}`;
+  const stampW = ctx.measureText(verdict.title).width;
+  const stampBoxW = stampW + 60;
+  const stampBoxH = 82;
+  // outer double border
+  ctx.strokeStyle = red;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(-stampBoxW / 2, -stampBoxH / 2, stampBoxW, stampBoxH);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(-stampBoxW / 2 + 6, -stampBoxH / 2 + 6, stampBoxW - 12, stampBoxH - 12);
+  // stamp text
+  ctx.fillStyle = red;
+  ctx.fillText(verdict.title, 0, 20);
+  ctx.restore();
+  rY += 100;
 
-  drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
-  y += 6;
-  drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
-  y += 30;
-
-  ctx.fillStyle = ink;
-  ctx.font = `700 14px ${FONT}`;
-  ctx.textAlign = 'left';
-  ctx.fillText('ITEMIZED OFFENSES', PAD, y);
-  y += 28;
-
-  ctx.font = `500 18px ${FONT}`;
-  for (let i = 0; i < top.length; i++) {
-    const c = top[i];
-    const rank = `#${String(i+1).padStart(2,'0')}`;
-    const fine = `¤${c.score}${c.occurrences > 1 ? '  ×' + c.occurrences : ''}`;
-    const fineW = ctx.measureText(fine).width;
-    ctx.fillStyle = ink;
-    ctx.fillText(rank, PAD, y);
-    const msgX = PAD + 56;
-    const maxMsgW = W - PAD - msgX - fineW - 24;
-    const msg = `"${truncate(c.msg, Math.floor(maxMsgW / 11))}"`;
-    ctx.fillText(msg, msgX, y);
-    ctx.fillStyle = red;
-    ctx.font = `700 18px ${FONT}`;
-    ctx.textAlign = 'right';
-    ctx.fillText(fine, W - PAD, y);
-    ctx.textAlign = 'left';
-    ctx.font = `500 18px ${FONT}`;
-    y += 22;
-    ctx.fillStyle = red;
-    ctx.font = `600 12px ${FONT}`;
-    ctx.fillText(c.label.toUpperCase(), msgX, y);
-    ctx.fillStyle = ink3;
-    ctx.font = `400 12px ${FONT}`;
-    const labW = ctx.measureText(c.label.toUpperCase()).width;
-    ctx.fillText(`· ${c.author}${c.date ? ' · ' + shortDate(c.date) : ''}`, msgX + labW + 6, y);
-    y += 32;
-    ctx.font = `500 18px ${FONT}`;
-  }
-
-  y += 8;
-  drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
-  y += 30;
-
-  if (tl) {
-    ctx.fillStyle = ink;
-    ctx.font = `700 14px ${FONT}`;
-    ctx.textAlign = 'left';
-    ctx.fillText('SHAME OVER TIME', PAD, y);
-    ctx.fillStyle = ink3;
-    ctx.font = `400 11px ${FONT}`;
-    ctx.textAlign = 'right';
-    ctx.fillText('PEAK IN RED', W - PAD, y);
-    y += 18;
-
-    const chartX = PAD, chartY = y;
-    const chartW = W - PAD * 2, chartH = 110;
-    // background panel
-    ctx.fillStyle = '#ede7d8';
-    ctx.fillRect(chartX, chartY, chartW, chartH);
-    ctx.strokeStyle = rule;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(chartX + 0.5, chartY + 0.5, chartW - 1, chartH - 1);
-    ctx.setLineDash([]);
-
-    const barPadX = 12, barPadY = 10;
-    const innerW = chartW - barPadX * 2;
-    const innerH = chartH - barPadY * 2;
-    const gap = 3;
-    const barW = (innerW - gap * (tl.weeks - 1)) / tl.weeks;
-    const peakIdx = tl.buckets.indexOf(tl.peak);
-    for (let i = 0; i < tl.weeks; i++) {
-      const v = tl.buckets[i];
-      const h = v === 0 ? 2 : Math.max(4, (v / tl.peak) * innerH);
-      const bx = chartX + barPadX + i * (barW + gap);
-      const by = chartY + barPadY + (innerH - h);
-      const isPeak = i === peakIdx && v > 0;
-      ctx.fillStyle = v === 0 ? rule : (isPeak ? red : ink);
-      ctx.globalAlpha = v === 0 ? 0.5 : (isPeak ? 1 : 0.78);
-      ctx.fillRect(bx, by, barW, h);
-    }
-    ctx.globalAlpha = 1;
-    y += chartH + 8;
-
-    ctx.fillStyle = ink3;
-    ctx.font = `400 11px ${FONT}`;
-    ctx.textAlign = 'left';
-    ctx.fillText(tl.start, PAD, y);
-    ctx.textAlign = 'center';
-    ctx.fillText(tl.middle, W/2, y);
-    ctx.textAlign = 'right';
-    ctx.fillText(tl.end, W - PAD, y);
-    y += 22;
-    drawDashedLine(ctx, PAD, y, W - PAD, y, rule);
-    y += 26;
-  }
-
-  ctx.fillStyle = ink3;
-  ctx.font = `400 13px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.fillText('THANK YOU FOR YOUR COOPERATION', W/2, y); y += 22;
-  ctx.fillStyle = ink;
-  ctx.font = `700 14px ${FONT}`;
-  ctx.fillText('COMMITSHAME', W/2, y); y += 24;
+  // verdict sub
   ctx.fillStyle = ink3;
   ctx.font = `400 12px ${FONT}`;
-  ctx.fillText(`https://github.com/${repo}`, W/2, y);
+  ctx.textAlign = 'center';
+  ctx.fillText(verdict.sub, RCX, rY);
+  rY += 24;
+
+  // score number + /100
+  ctx.font = `700 80px ${FONT}`;
+  ctx.fillStyle = ink;
+  const scoreStr   = String(avgScore);
+  const scoreNumW  = ctx.measureText(scoreStr).width;
+  ctx.font = `400 24px ${FONT}`;
+  const of100W     = ctx.measureText('/100').width;
+  const scoreTotW  = scoreNumW + 8 + of100W;
+  const scoreStartX = RCX - scoreTotW / 2;
+  ctx.font = `700 80px ${FONT}`;
+  ctx.fillStyle = ink;
+  ctx.textAlign = 'left';
+  ctx.fillText(scoreStr, scoreStartX, rY + 60);
+  ctx.font = `400 24px ${FONT}`;
+  ctx.fillStyle = ink3;
+  ctx.fillText('/100', scoreStartX + scoreNumW + 8, rY + 60);
+
+  // tier badge to the right of score
+  const tierColors = ['#2d6a3a', '#4a3f37', '#b07a00', '#c25a1d', '#c8302d', '#c8302d'];
+  const tierColor = tierColors[tier.rank];
+  ctx.font = `700 16px ${STAMP_FONT}`;
+  const tNameW = ctx.measureText(tier.name).width;
+  ctx.save();
+  ctx.translate(scoreStartX + scoreTotW + 24 + tNameW / 2 + 12, rY + 30);
+  ctx.rotate(-2 * Math.PI / 180);
+  ctx.fillStyle = '#f5f1e8';
+  ctx.strokeStyle = tierColor;
+  ctx.lineWidth = tier.rank >= 5 ? 3 : 2;
+  ctx.fillRect(-tNameW / 2 - 12, -16, tNameW + 24, 32);
+  ctx.strokeRect(-tNameW / 2 - 12, -16, tNameW + 24, 32);
+  if (tier.rank >= 5) ctx.strokeRect(-tNameW / 2 - 6, -10, tNameW + 12, 20);
+  ctx.fillStyle = tierColor;
+  ctx.textAlign = 'center';
+  ctx.fillText(tier.name, 0, 5);
+  ctx.restore();
+
+  rY += 76;
+
+  // shame meter in right column
+  const mX = RX, mW = RW, mY2 = rY, mH = 16;
+  const zoneColors = ['#a8c8a8','#d8c878','#dca070','#d88060','#c8302d'];
+  const zoneAlpha  = [0.38, 0.42, 0.46, 0.46, 0.58];
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = zoneColors[i];
+    ctx.globalAlpha = zoneAlpha[i];
+    ctx.fillRect(mX + (mW / 5) * i, mY2, mW / 5, mH);
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(mX, mY2, mW, mH);
+  const fillPx = (Math.max(0, Math.min(100, avgScore)) / 100) * mW;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(mX, mY2, fillPx, mH);
+  ctx.clip();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 1;
+  for (let i = -mH; i < fillPx + mH; i += 5) {
+    ctx.beginPath();
+    ctx.moveTo(mX + i, mY2 + mH);
+    ctx.lineTo(mX + i + mH, mY2);
+    ctx.stroke();
+  }
+  ctx.restore();
+  const markerX = mX + fillPx;
+  ctx.fillStyle = red;
+  ctx.fillRect(markerX - 2, mY2 - 6, 3, mH + 12);
+
+  // zone labels under meter
+  const zoneNames = ['TRACE', 'MILD', 'NOTABLE', 'HEAVY', 'LEGENDARY'];
+  ctx.fillStyle = ink3;
+  ctx.font = `400 9px ${FONT}`;
+  ctx.textAlign = 'center';
+  for (let i = 0; i < 5; i++) {
+    ctx.fillText(zoneNames[i], mX + (mW / 5) * i + mW / 10, mY2 + mH + 14);
+  }
+
+  // ── DIVIDER ──
+  drawDashedLine(ctx, PAD, MAIN_BOT + 2, W - PAD, MAIN_BOT + 2, rule, 6);
+  drawDashedLine(ctx, PAD, MAIN_BOT + 8, W - PAD, MAIN_BOT + 8, rule, 6);
+
+  // ── ITEMIZED OFFENSES (bottom two-column grid) ──
+  const OFF_TOP = MAIN_BOT + 26;
+  ctx.fillStyle = ink;
+  ctx.font = `700 12px ${FONT}`;
+  ctx.textAlign = 'left';
+  ctx.fillText('ITEMIZED OFFENSES', PAD, OFF_TOP);
+  ctx.fillStyle = ink3;
+  ctx.font = `400 10px ${FONT}`;
+  ctx.textAlign = 'right';
+  ctx.fillText('TOP BAD COMMITS', W - PAD, OFF_TOP);
+
+  const numCols  = 2;
+  const numRows  = 4;
+  const offColW  = (W - PAD * 2) / numCols;
+  const offRowH  = 24;
+
+  for (let i = 0; i < Math.min(top.length, numCols * numRows); i++) {
+    const c   = top[i];
+    const col = Math.floor(i / numRows);
+    const row = i % numRows;
+    const ox  = PAD + col * offColW;
+    const oy  = OFF_TOP + 18 + row * offRowH;
+
+    ctx.fillStyle = ink3;
+    ctx.font = `400 11px ${FONT}`;
+    ctx.textAlign = 'left';
+    ctx.fillText(`#${String(i + 1).padStart(2, '0')}`, ox, oy);
+
+    ctx.fillStyle = ink;
+    ctx.font = `500 13px ${FONT}`;
+    const maxMW = offColW - 100;
+    const msgTxt = `"${truncate(c.msg, Math.floor(maxMW / 8.5))}"`;
+    ctx.fillText(msgTxt, ox + 36, oy);
+
+    ctx.fillStyle = red;
+    ctx.font = `700 13px ${FONT}`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`¤${c.score}`, ox + offColW - 4, oy);
+  }
+
+  // ── FOOTER ──
+  const FOOT_Y = H - TEAR - 46;
+  drawDashedLine(ctx, PAD, FOOT_Y - 12, W - PAD, FOOT_Y - 12, rule, 4);
+
+  // barcode block centred in footer
+  const bcW = 200, bcH = 22;
+  const bcX = W / 2 - bcW / 2;
+  const bcY = FOOT_Y - 2;
+  ctx.save();
+  const pattern = [1,3,1,2,2,2,1,1,3,1,2,2,1,3,1,1,2,3,1,2];
+  let bx = bcX;
+  let fill = true;
+  for (const seg of pattern) {
+    const sw2 = (seg / 18) * bcW;
+    if (fill) { ctx.fillStyle = ink; ctx.fillRect(bx, bcY, sw2, bcH); }
+    bx += sw2;
+    fill = !fill;
+  }
+  ctx.restore();
+
+  ctx.fillStyle = ink3;
+  ctx.font = `400 11px ${FONT}`;
+  ctx.textAlign = 'left';
+  ctx.fillText(`github.com/${repo}`, PAD, FOOT_Y + 22);
+  ctx.textAlign = 'right';
+  ctx.fillText(`commitsha.me  ·  ${new Date().toISOString().slice(0, 10)}`, W - PAD, FOOT_Y + 22);
 
   return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png'));
 }
