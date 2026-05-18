@@ -4,7 +4,7 @@ A verdict on your git history. Drop a GitHub repo, get a printed receipt of its 
 
 **Live: <https://commitsha.me>**
 
-> No signup. No tracking. Pooled API. Built for the chaos.
+> No signup. No tracking.
 
 ```
    ━━━━━━━━━━ OFFICIAL SHAME RECEIPT ━━━━━━━━━━
